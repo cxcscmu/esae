@@ -25,6 +25,7 @@ dependencies:
   - faiss-gpu==1.8.0
   - blobfile==3.0.0
   - elasticsearch==8.15.1
-  - pillow==9.5.0
+  - pillow
+  - gdown
   - pip:
-      - treevizer==0.2.4
+      - treevizer

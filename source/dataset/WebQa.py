@@ -6,6 +6,7 @@
 """
 
 import gdown
+import requests
 import subprocess
 from pathlib import Path
 
@@ -67,11 +68,33 @@ class WebQaDownload:
         for file in self.home.glob("*.7z.*"):
             file.unlink()
 
+    def step2(self) -> None:
+        """
+        Download and extract other files.
+        """
+        with console.status("Downloading..."):
+            # rely on the preprocessed WebQA from MARVEL, since
+            # the original dataset is no longer publicly available
+            url = "https://thunlp.oss-cn-qingdao.aliyuncs.com/UniVLDR/data.zip"
+            response = requests.get(url, stream=True)
+            with Path(self.home, "data.zip").open("wb") as f:
+                for chunk in response.iter_content(chunk_size=2048):
+                    f.write(chunk)
+        with console.status("Extracting..."):
+            subprocess.run(
+                ["unzip", "-j", "data.zip", "data/*", "-d", self.home],
+                cwd=self.home,
+                capture_output=True,
+                check=True,
+            )
+        Path(self.home, "data.zip").unlink()
+
     def dispatch(self) -> None:
         """
         Dispatch the download steps.
         """
-        # self.step1()
+        self.step1()
+        self.step2()
 
 
 def main():
