@@ -24,20 +24,17 @@ class Model(nn.Module, SAE):
         self.encoder = nn.Linear(features, features * expandBy)
         self.decoder = nn.Linear(features * expandBy, features)
 
-    def forwardEncoder(self, x: Tensor, activate: int) -> Tensor:
+    def forwardEncoder(self, x: Tensor) -> Tensor:
         xbar = x - self.decoder.bias
-        a = self.encoder.forward(xbar)
-        pack = torch.topk(a, activate)
-        f = torch.zeros_like(a)
-        f.scatter_(1, pack.indices, F.relu(pack.values))
+        f = self.encoder.forward(xbar)
         return f
 
     def forwardDecoder(self, f: Tensor) -> Tensor:
         xhat = self.decoder.forward(f)
         return xhat
 
-    def forward(self, x: Tensor, activate: int) -> Tuple[Tensor, Tensor]:
-        f = self.forwardEncoder(x, activate)
+    def forward(self, x: Tensor) -> Tuple[Tensor, Tensor]:
+        f = self.forwardEncoder(x)
         xhat = self.forwardDecoder(f)
         return f, xhat
 
@@ -46,7 +43,7 @@ class Model(nn.Module, SAE):
 class HyperParams:
     features: int
     expandBy: int
-    activate: int
+    sparsity: float
     relevant: int
 
 
@@ -59,7 +56,7 @@ class TrainParams:
 
 class Trainer:
 
-    hyperParams = HyperParams(features=768, expandBy=256, activate=32, relevant=8)
+    hyperParams = HyperParams(features=768, expandBy=256, sparsity=0.98, relevant=8)
     trainParams = TrainParams(batchSize=512, numEpochs=128, learnRate=1e-3)
 
     def __init__(self) -> None:
@@ -79,46 +76,34 @@ class Trainer:
         wandb.save("source/**/*.py", policy="now")
 
     def trainLoss(
-        self, qry: Tensor, docs: Tensor, qryHat: Tensor, docsHat: Tensor
+        self, qry: Tensor, docs: Tensor, qryHat: Tensor, docsHat: Tensor, qryF: Tensor, docsF: Tensor
     ) -> Dict[str, Tensor]:
         loss = dict()
         loss["Train.MSE"] = torch.tensor(0.0, requires_grad=True)
         loss["Train.MSE"] = loss["Train.MSE"] + F.mse_loss(qryHat, qry)
         loss["Train.MSE"] = loss["Train.MSE"] + F.mse_loss(docsHat, docs)
-        loss["Train.KLD"] = torch.tensor(0.0, requires_grad=True)
-        buf = torch.exp(
-            torch.matmul(
-                qry.unsqueeze(1),
-                docs.transpose(1, 2),
-            ).squeeze(1)
-        )
-        bufSum = buf.sum(dim=1)
-        bufHat = torch.exp(
-            torch.matmul(
-                qryHat.unsqueeze(1),
-                docsHat.transpose(1, 2),
-            ).squeeze(1)
-        )
-        bufHatSum = bufHat.sum(dim=1)
-        for i in range(qry.size(0)):
-            for j in range(docs.size(1)):
-                tar = buf[i, j] / (buf[i, j] + bufSum[i])
-                ins = torch.log(bufHat[i, j] / (bufHat[i, j] + bufHatSum[i]))
-                loss["Train.KLD"] = loss["Train.KLD"] + F.kl_div(
-                    ins, tar, reduction="batchmean"
-                )
+        loss["Train.SPINE"] = torch.tensor(0.0, requires_grad=True)
+        PSL = torch.sum(qryF * (1 - qryF)) / (qryF.numel())
+        sparsity = self.hyperParams.sparsity
+        base = torch.clamp(torch.mean(qryF, dim=0) - (1.0 - sparsity), min=0.0)
+        ASL = torch.sum(torch.pow(base, 2)) / qryF.size(1)
+        loss["Train.SPINE"] = loss["Train.SPINE"] + PSL + ASL
+        PSL = torch.sum(docsF * (1 - docsF)) / (docsF.numel())
+        sparsity = self.hyperParams.sparsity
+        base = torch.clamp(torch.mean(docsF, dim=0) - (1.0 - sparsity), min=0.0)
+        ASL = torch.sum(torch.pow(base, 2)) / docsF.size(1)
+        loss["Train.SPINE"] = loss["Train.SPINE"] + PSL + ASL
         return loss
 
     def trainStep(self, qry: Tensor, docs: Tensor) -> Dict[str, Tensor]:
         self.optimizer.zero_grad()
         qry = qry.to(self.model.device_ids[0])
         docs = docs.to(self.model.device_ids[0])
-        activate = self.hyperParams.activate
         with amp.autocast("cuda"):
-            _, qryHat = self.model.forward(qry, activate)
-            _, docsHat = self.model.forward(docs.view(-1, docs.size(-1)), activate)
+            qryF, qryHat = self.model.forward(qry)
+            docsF, docsHat = self.model.forward(docs.view(-1, docs.size(-1)))
             assert isinstance(qryHat, Tensor) and isinstance(docsHat, Tensor)
-            loss = self.trainLoss(qry, docs, qryHat, docsHat.view(docs.size()))
+            loss = self.trainLoss(qry, docs, qryHat, docsHat.view(docs.size()), qryF, docsF)
         self.scaler.scale(sum(loss.values())).backward()
         self.scaler.step(self.optimizer)
         self.scaler.update()
@@ -149,41 +134,32 @@ class Trainer:
         return iterLoss
 
     def validateLoss(
-        self, qry: Tensor, docs: Tensor, qryHat: Tensor, docsHat: Tensor
+        self, qry: Tensor, docs: Tensor, qryHat: Tensor, docsHat: Tensor, qryF: Tensor, docsF: Tensor
     ) -> Dict[str, Tensor]:
         loss = dict()
         loss["Validate.MSE"] = torch.tensor(0.0)
         loss["Validate.MSE"] = loss["Validate.MSE"] + F.mse_loss(qryHat, qry)
         loss["Validate.MSE"] = loss["Validate.MSE"] + F.mse_loss(docsHat, docs)
-        loss["Validate.KLD"] = torch.tensor(0.0)
-        buf = torch.exp(
-            torch.matmul(
-                qry.unsqueeze(1),
-                docs.transpose(1, 2),
-            ).squeeze(1)
-        )
-        bufSum = buf.sum(dim=1)
-        bufHat = torch.exp(
-            torch.matmul(
-                qryHat.unsqueeze(1),
-                docsHat.transpose(1, 2),
-            ).squeeze(1)
-        )
-        bufHatSum = bufHat.sum(dim=1)
-        # compute KLD in a vectorized manner
-        tar = buf / (buf + bufSum)
-        ins = torch.log(bufHat / (bufHat + bufHatSum))
-        loss["Validate.KLD"] += F.kl_div(ins, tar, reduction="batchmean")
+        loss["Validate.SPINE"] = torch.tensor(0.0)
+        PSL = torch.sum(qryF * (1 - qryF)) / (qryF.numel())
+        sparsity = self.hyperParams.sparsity
+        base = torch.clamp(torch.mean(qryF, dim=0) - (1.0 - sparsity), min=0.0)
+        ASL = torch.sum(torch.pow(base, 2)) / qryF.size(1)
+        loss["Validate.SPINE"] = loss["Validate.SPINE"] + PSL + ASL
+        PSL = torch.sum(docsF * (1 - docsF)) / (docsF.numel())
+        sparsity = self.hyperParams.sparsity
+        base = torch.clamp(torch.mean(docsF, dim=0) - (1.0 - sparsity), min=0.0)
+        ASL = torch.sum(torch.pow(base, 2)) / docsF.size(1)
+        loss["Validate.SPINE"] = loss["Validate.SPINE"] + PSL + ASL
         return loss
 
     def validateStep(self, qry: Tensor, docs: Tensor) -> Dict[str, Tensor]:
         qry = qry.to(self.model.device_ids[0])
         docs = docs.to(self.model.device_ids[0])
-        activate = self.hyperParams.activate
-        _, qryHat = self.model.forward(qry, activate)
-        _, docsHat = self.model.forward(docs.view(-1, docs.size(-1)), activate)
+        qryF, qryHat = self.model.forward(qry)
+        docsF, docsHat = self.model.forward(docs.view(-1, docs.size(-1)))
         assert isinstance(qryHat, Tensor) and isinstance(docsHat, Tensor)
-        loss = self.validateLoss(qry, docs, qryHat, docsHat.view(docs.size()))
+        loss = self.validateLoss(qry, docs, qryHat, docsHat.view(docs.size()), qryF, docsF)
         return loss
 
     @torch.inference_mode()
@@ -234,7 +210,7 @@ class Trainer:
             health["LR"] = self.optimizer.param_groups[0]["lr"]
             wandb.log(health)
             for key, val in health.items():
-                console.log(f"{key:>12}={val:.7f}")
+                console.log(f"{key:>14}={val:.7f}")
         wandb.finish()
 
 

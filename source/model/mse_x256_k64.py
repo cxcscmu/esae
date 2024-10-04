@@ -59,7 +59,7 @@ class TrainParams:
 
 class Trainer:
 
-    hyperParams = HyperParams(features=768, expandBy=256, activate=32, relevant=8)
+    hyperParams = HyperParams(features=768, expandBy=256, activate=64, relevant=8)
     trainParams = TrainParams(batchSize=512, numEpochs=128, learnRate=1e-3)
 
     def __init__(self) -> None:
@@ -85,28 +85,6 @@ class Trainer:
         loss["Train.MSE"] = torch.tensor(0.0, requires_grad=True)
         loss["Train.MSE"] = loss["Train.MSE"] + F.mse_loss(qryHat, qry)
         loss["Train.MSE"] = loss["Train.MSE"] + F.mse_loss(docsHat, docs)
-        loss["Train.KLD"] = torch.tensor(0.0, requires_grad=True)
-        buf = torch.exp(
-            torch.matmul(
-                qry.unsqueeze(1),
-                docs.transpose(1, 2),
-            ).squeeze(1)
-        )
-        bufSum = buf.sum(dim=1)
-        bufHat = torch.exp(
-            torch.matmul(
-                qryHat.unsqueeze(1),
-                docsHat.transpose(1, 2),
-            ).squeeze(1)
-        )
-        bufHatSum = bufHat.sum(dim=1)
-        for i in range(qry.size(0)):
-            for j in range(docs.size(1)):
-                tar = buf[i, j] / (buf[i, j] + bufSum[i])
-                ins = torch.log(bufHat[i, j] / (bufHat[i, j] + bufHatSum[i]))
-                loss["Train.KLD"] = loss["Train.KLD"] + F.kl_div(
-                    ins, tar, reduction="batchmean"
-                )
         return loss
 
     def trainStep(self, qry: Tensor, docs: Tensor) -> Dict[str, Tensor]:
@@ -155,25 +133,6 @@ class Trainer:
         loss["Validate.MSE"] = torch.tensor(0.0)
         loss["Validate.MSE"] = loss["Validate.MSE"] + F.mse_loss(qryHat, qry)
         loss["Validate.MSE"] = loss["Validate.MSE"] + F.mse_loss(docsHat, docs)
-        loss["Validate.KLD"] = torch.tensor(0.0)
-        buf = torch.exp(
-            torch.matmul(
-                qry.unsqueeze(1),
-                docs.transpose(1, 2),
-            ).squeeze(1)
-        )
-        bufSum = buf.sum(dim=1)
-        bufHat = torch.exp(
-            torch.matmul(
-                qryHat.unsqueeze(1),
-                docsHat.transpose(1, 2),
-            ).squeeze(1)
-        )
-        bufHatSum = bufHat.sum(dim=1)
-        # compute KLD in a vectorized manner
-        tar = buf / (buf + bufSum)
-        ins = torch.log(bufHat / (bufHat + bufHatSum))
-        loss["Validate.KLD"] += F.kl_div(ins, tar, reduction="batchmean")
         return loss
 
     def validateStep(self, qry: Tensor, docs: Tensor) -> Dict[str, Tensor]:

@@ -59,7 +59,7 @@ class TrainParams:
 
 class Trainer:
 
-    hyperParams = HyperParams(features=768, expandBy=256, activate=32, relevant=8)
+    hyperParams = HyperParams(features=768, expandBy=256, activate=64, relevant=8)
     trainParams = TrainParams(batchSize=512, numEpochs=128, learnRate=1e-3)
 
     def __init__(self) -> None:
