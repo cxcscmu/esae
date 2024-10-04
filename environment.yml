@@ -26,5 +26,6 @@ dependencies:
   - blobfile==3.0.0
   - elasticsearch==8.15.1
   - pillow==9.5.0
+  - seaborn==0.13.2
   - pip:
       - treevizer==0.2.4
