@@ -168,7 +168,7 @@ class Trainer:
         bufHatSum = bufHat.sum(dim=1).view(-1, 1)
         tar = buf / (buf + bufSum)
         ins = torch.log(bufHat / (bufHat + bufHatSum))
-        loss["Validate.KLD"] = F.kl_div(ins, tar, reduction="batchmean")
+        loss["Train.KLD"] = F.kl_div(ins, tar, reduction="batchmean")
         return loss
 
     def validateStep(self, qry: Tensor, docs: Tensor) -> Dict[str, Tensor]:
