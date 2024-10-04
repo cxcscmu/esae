@@ -56,7 +56,7 @@ class TrainParams:
 
 class Trainer:
 
-    hyperParams = HyperParams(features=768, expandBy=256, sparsity=0.98, relevant=8)
+    hyperParams = HyperParams(features=768, expandBy=256, sparsity=0.98, relevant=16)
     trainParams = TrainParams(batchSize=512, numEpochs=128, learnRate=1e-3)
 
     def __init__(self) -> None:
@@ -130,7 +130,6 @@ class Trainer:
         numBatches = self.dataset.getMixLen("Train") // batchSize
         for key in iterLoss.keys():
             iterLoss[key] /= numBatches
-        self.scheduler.step()
         return iterLoss
 
     def validateLoss(
@@ -184,7 +183,6 @@ class Trainer:
         numBatches = self.dataset.getMixLen("Validate") // batchSize
         for key in iterLoss.keys():
             iterLoss[key] /= numBatches
-        self.scheduler.step()
         return iterLoss
 
     def run(self):
@@ -208,6 +206,7 @@ class Trainer:
             health.update(trainLoss)
             health.update(validateLoss)
             health["LR"] = self.optimizer.param_groups[0]["lr"]
+            self.scheduler.step()
             wandb.log(health)
             for key, val in health.items():
                 console.log(f"{key:>14}={val:.7f}")
