@@ -92,21 +92,17 @@ class Trainer:
                 docs.transpose(1, 2),
             ).squeeze(1)
         )
-        bufSum = buf.sum(dim=1)
+        bufSum = buf.sum(dim=1).view(-1, 1)
         bufHat = torch.exp(
             torch.matmul(
                 qryHat.unsqueeze(1),
                 docsHat.transpose(1, 2),
             ).squeeze(1)
         )
-        bufHatSum = bufHat.sum(dim=1)
-        for i in range(qry.size(0)):
-            for j in range(docs.size(1)):
-                tar = buf[i, j] / (buf[i, j] + bufSum[i])
-                ins = torch.log(bufHat[i, j] / (bufHat[i, j] + bufHatSum[i]))
-                loss["Train.KLD"] = loss["Train.KLD"] + F.kl_div(
-                    ins, tar, reduction="batchmean"
-                )
+        bufHatSum = bufHat.sum(dim=1).view(-1, 1)
+        tar = buf / (buf + bufSum)
+        ins = torch.log(bufHat / (bufHat + bufHatSum))
+        loss["Validate.KLD"] = F.kl_div(ins, tar, reduction="batchmean")
         return loss
 
     def trainStep(self, qry: Tensor, docs: Tensor) -> Dict[str, Tensor]:
@@ -162,18 +158,17 @@ class Trainer:
                 docs.transpose(1, 2),
             ).squeeze(1)
         )
-        bufSum = buf.sum(dim=1)
+        bufSum = buf.sum(dim=1).view(-1, 1)
         bufHat = torch.exp(
             torch.matmul(
                 qryHat.unsqueeze(1),
                 docsHat.transpose(1, 2),
             ).squeeze(1)
         )
-        bufHatSum = bufHat.sum(dim=1)
-        # compute KLD in a vectorized manner
+        bufHatSum = bufHat.sum(dim=1).view(-1, 1)
         tar = buf / (buf + bufSum)
         ins = torch.log(bufHat / (bufHat + bufHatSum))
-        loss["Validate.KLD"] += F.kl_div(ins, tar, reduction="batchmean")
+        loss["Validate.KLD"] = F.kl_div(ins, tar, reduction="batchmean")
         return loss
 
     def validateStep(self, qry: Tensor, docs: Tensor) -> Dict[str, Tensor]:
