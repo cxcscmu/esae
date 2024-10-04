@@ -9,7 +9,6 @@
   },
   "[python]": {
     "editor.tabSize": 4,
-    "editor.formatOnSave": true,
     "editor.defaultFormatter": "ms-python.black-formatter",
   },
   "[jsonc]": {

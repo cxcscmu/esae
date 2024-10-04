@@ -100,9 +100,12 @@ class MsMarcoDataset(Dataset):
         shuffle: bool,
         idxs: List[int],
     ) -> Iterator[Tuple[Tensor, List[str], Tensor]]:
+        """
+        @todo: fix the typing override.
+        """
         embed = embedding()
         idx = 0
-        idxs = deque(sorted(idxs))
+        idxs = deque(sorted(idxs)) # type: ignore
         done = False
         for p in range(4):
             path = Path(DocIterInit.base, f"partition-{p:08d}.parquet")
@@ -111,9 +114,12 @@ class MsMarcoDataset(Dataset):
             batches = file.iter_batches(1, columns=["text"])
             for i, part in enumerate(batches):
                 if idx == idxs[0]:
-                    idxs.popleft()
+                    idxs.popleft() # type: ignore
                     txt = part.column("text").to_pylist()
-                    vec, tokens, token_ids = embed.forward_prefix(txt)
+                    """
+                    @todo: add forward_prefix to the Embedding interface.
+                    """
+                    vec, tokens, token_ids = embed.forward_prefix(txt) # type: ignore
                     yield vec, tokens, token_ids.detach().cpu().tolist()
                 idx += 1
                 if len(idxs) == 0:
@@ -396,7 +402,7 @@ class QryRelInit:
         self.base.mkdir(mode=0o770, parents=True, exist_ok=True)
         asyncio.run(self.dispatch())
 
-    async def dispatch(self) -> None:
+    async def dispatch(self):
         # we should have dispatched all tasks at once, but due to progress bar
         # constraints, only one at a time is possible. Otherwise, the progress
         # bar would be globally defined, and may interfere with training logs.

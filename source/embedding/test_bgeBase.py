@@ -1,7 +1,7 @@
 from source.embedding.bgeBase import BgeBaseEmbedding
 
 
-def test_forward_1():
+def test_forward():
     """
     Test forward method.
     """
