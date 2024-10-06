@@ -33,7 +33,7 @@ def main(dataset: Dataset, embedding: Type[Embedding], version: str):
     )
 
     # define where to save results
-    saveBase = Path(workspace, "reconstruct")
+    saveBase = Path(workspace, "decoded")
     saveBase.mkdir(mode=0o770, parents=True, exist_ok=True)
     qresFile = Path(saveBase, f"{version}.qres")
     evalFile = Path(saveBase, f"{version}.eval")
@@ -54,7 +54,7 @@ def main(dataset: Dataset, embedding: Type[Embedding], version: str):
                 D, I = gpuIndex.search(bQrys, 100)
                 for qid, sims, dnos in zip(bQids, D, I):
                     for s, d in zip(sims, dnos):
-                        f.write(f"{qid}\tQ0\t{dids[d]}\t0\t{s}\tReconstruct\n")
+                        f.write(f"{qid}\tQ0\t{dids[d]}\t0\t{s}\tDecoded\n")
                 f.flush()
                 p.update(t, advance=bQrys.shape[0])
         p.remove_task(t)

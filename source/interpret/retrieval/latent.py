@@ -14,7 +14,6 @@ from source.utilities.model import saveComputed
 from source.dataset import MsMarcoDataset
 from source.embedding import BgeBaseEmbedding
 from source.interface import Dataset, Embedding
-from source.interpret import esUser, esAuth, esCert
 
 
 def main(
@@ -60,10 +59,7 @@ def main(
 
     # create connection to elastic search
     es = Elasticsearch(
-        hosts=[{"host": esHost, "port": esPort}],
-        http_auth=(esUser, esAuth),
-        ca_certs=esCert,
-        scheme="https",
+        hosts=[{"host": esHost, "port": esPort, "scheme": "http"}],
     )
     es.indices.create(
         index=f"{version}.latent".lower(),
@@ -163,7 +159,7 @@ if __name__ == "__main__":
     parser.add_argument("version", type=str)
     parser.add_argument("--dataset", type=str, default="MsMarco", choices=["MsMarco"])
     parser.add_argument("--embedding", type=str, default="BgeBase", choices=["BgeBase"])
-    parser.add_argument("--esHost", type=str, default="172.16.1.166")
+    parser.add_argument("--esHost", type=str, default="localhost")
     parser.add_argument("--esPort", type=int, default=9200)
     args = parser.parse_args()
 
