@@ -30,7 +30,7 @@ with open("saved1.bin", "wb") as f:
 Plot the frequency with latent features.
 """
 
-version, activate, dictsize = "240906A", 384, 768 * 256
+version, activate, dictsize = "kld_x256_k256", 256, 768 * 256
 base = Path(f"/data/group_data/cx_group/esae/model/{version}/computed/")
 docLatentIndex = np.memmap(Path(base, "docLatentIndex.bin"), dtype=np.int32, mode="r")
 docLatentValue = np.memmap(Path(base, "docLatentValue.bin"), dtype=np.float32, mode="r")
@@ -45,7 +45,7 @@ with Progress() as p:
         indices = docLatentIndex[i][indices]
         counter[indices] += 1
         p.update(t, advance=1)
-np.save("saved2.bin", counter)
+np.save("saved2.npy", counter)
 
 with open("saved1.bin", "rb") as f:
     counter = pickle.load(f)
@@ -53,7 +53,7 @@ with open("saved1.bin", "rb") as f:
 x1 = list(counter.keys())
 y1 = list(counter.values())
 
-counter = np.load("saved2.bin")
+counter = np.load("saved2.npy")
 counter = Counter(counter)
 x2 = list(counter.keys())
 y2 = list(counter.values())
