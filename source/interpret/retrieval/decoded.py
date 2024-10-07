@@ -67,7 +67,6 @@ def main(embedding: Type[Embedding], dataset: Dataset, version: str):
     with console.status("Evaluating..."):
         with evalFile.open("w") as f:
             subprocess.run(args, stdout=f)
-    shutil.copy(evalFile, "last.log")
 
 
 if __name__ == "__main__":
