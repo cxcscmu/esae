@@ -11,14 +11,13 @@ from source import console
 from source.interpret.retrieval import workspace
 from source.model import workspace as modelWorkspace
 from source.utilities.model import saveComputed
-from source.dataset import MsMarcoDataset
+from source.dataset import MsMarcoDataset, BeirDataset
 from source.embedding import BgeBaseEmbedding
 from source.interface import Dataset, Embedding
-from source.interpret import esUser, esAuth, esCert
 
 
 def main(
-    dataset: Dataset, embedding: Type[Embedding], version: str, esHost: str, esPort: int
+    embedding: Type[Embedding], dataset: Dataset, version: str, esHost: str, esPort: int
 ):
     # load attributes for latent space
     module = import_module(f"source.model.{version}")
@@ -26,9 +25,9 @@ def main(
     assert isinstance(activate, int)
 
     # define where to read computed features
-    readBase = Path(modelWorkspace, version, "computed")
+    readBase = Path(modelWorkspace, version, "computed", dataset.name)
     if not readBase.exists():
-        saveComputed(dataset, embedding, version)
+        saveComputed(embedding, dataset, version)
     docLen = dataset.getDocLen()
     docLatentIndex = np.memmap(
         Path(readBase, "docLatentIndex.bin"),
@@ -53,17 +52,14 @@ def main(
     )
 
     # define where to save results
-    saveBase = Path(workspace, "latent")
+    saveBase = Path(workspace, "latent", dataset.name)
     saveBase.mkdir(mode=0o770, parents=True, exist_ok=True)
     qresFile = Path(saveBase, f"{version}.qres")
     evalFile = Path(saveBase, f"{version}.eval")
 
     # create connection to elastic search
     es = Elasticsearch(
-        hosts=[{"host": esHost, "port": esPort}],
-        http_auth=(esUser, esAuth),
-        ca_certs=esCert,
-        scheme="https",
+        hosts=[{"host": esHost, "port": esPort, "scheme": "http"}],
     )
     es.indices.create(
         index=f"{version}.latent".lower(),
@@ -154,16 +150,15 @@ def main(
     with console.status("Evaluating..."):
         with evalFile.open("w") as f:
             subprocess.run(args, stdout=f)
-    shutil.copy(evalFile, "last.log")
 
 
 if __name__ == "__main__":
     # specify command line arguments
     parser = argparse.ArgumentParser()
+    parser.add_argument("embedding", type=str, choices=["BgeBase"])
+    parser.add_argument("dataset", type=str, choices=["MsMarco", "Beir"])
     parser.add_argument("version", type=str)
-    parser.add_argument("--dataset", type=str, default="MsMarco", choices=["MsMarco"])
-    parser.add_argument("--embedding", type=str, default="BgeBase", choices=["BgeBase"])
-    parser.add_argument("--esHost", type=str, default="172.16.1.166")
+    parser.add_argument("--esHost", type=str, default="localhost")
     parser.add_argument("--esPort", type=int, default=9200)
     args = parser.parse_args()
 
@@ -171,6 +166,8 @@ if __name__ == "__main__":
     match args.dataset:
         case "MsMarco":
             dataset = MsMarcoDataset()
+        case "Beir":
+            dataset = BeirDataset()
         case _:
             raise NotImplementedError()
     match args.embedding:
@@ -180,4 +177,4 @@ if __name__ == "__main__":
             raise NotImplementedError()
 
     # run the workflow
-    main(dataset, embedding, args.version, args.esHost, args.esPort)
+    main(embedding, dataset, args.version, args.esHost, args.esPort)

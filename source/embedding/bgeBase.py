@@ -2,7 +2,7 @@ import torch
 from torch import Tensor
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import List
+from typing import List, Tuple, Any
 from transformers.models.bert.modeling_bert import BertModel
 from transformers.models.bert.tokenization_bert_fast import BertTokenizerFast
 from transformers.modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions
@@ -38,7 +38,10 @@ class BgeBaseEmbedding(Embedding):
         return F.normalize(hiddens[:, 0], p=2, dim=1)
     
     @torch.inference_mode()
-    def forward_prefix(self, passages: List[str]) -> Tensor:
+    def forward_prefix(self, passages: List[str]) -> Tuple[Tensor, Any, Any]:
+        """
+        @todo: fix the return type.
+        """
         kwargs = dict(padding=True, truncation=True, return_tensors="pt")
         encoded = self.tokenizer(passages[0], **kwargs)
         input_ids = encoded.input_ids[0]  # Shape: [seq_len]

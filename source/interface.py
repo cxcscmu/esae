@@ -49,7 +49,7 @@ class Embedding(ABC):
 """
 DatasetName contains the names of the datasets implemented in this project.
 """
-DatasetName = Literal["MsMarco"]
+DatasetName = Literal["MsMarco", "Beir"]
 
 """
 PartitionName refers to the partition of the dataset.
@@ -68,13 +68,13 @@ class Dataset(ABC):
     name: DatasetName
 
     @abstractmethod
-    def didIter(self, batchSize: int) -> Iterator[List[int]]:
+    def didIter(self, batchSize: int) -> Iterator[List[int | str]]:
         """
         Iterate over the document IDs in batches.
 
         :type batchSize: int
         :param batchSize: The batch size for each iteration.
-        :rtype: Iterator[List[int]]
+        :rtype: Iterator[List[int | str]]
         :return: An iterator over the document IDs. Each iteration returns a list of document IDs.
         """
         raise NotImplementedError
@@ -127,7 +127,9 @@ class Dataset(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def qidIter(self, split: PartitionName, batchSize: int) -> Iterator[List[int]]:
+    def qidIter(
+        self, split: PartitionName, batchSize: int
+    ) -> Iterator[List[int | str]]:
         """
         Iterate over the query IDs in batches.
 
@@ -135,7 +137,7 @@ class Dataset(ABC):
         :param split: Whether to use the training or validation split.
         :type batchSize: int
         :param batchSize: The batch size for each iteration.
-        :rtype: Iterator[List[int]]
+        :rtype: Iterator[List[int | str]]
         :return: The iterator over the query IDs. Each iteration returns a list of query IDs.
         """
         raise NotImplementedError

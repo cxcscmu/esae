@@ -1,11 +1,11 @@
-from source.embedding.bgeBase import BgeBaseEmbedding
+from source.embedding.miniPcm import MiniPcmEmbedding
 
 
 def test_forward():
     """
     Test forward method.
     """
-    embedding = BgeBaseEmbedding()
+    embedding = MiniPcmEmbedding()
     passages = ["Hello, world!", "Goodbye, world!"]
     results = embedding.forward(passages)
-    assert results.shape == (len(passages), BgeBaseEmbedding.size)
+    assert results.shape == (len(passages), MiniPcmEmbedding.size)

@@ -2,7 +2,6 @@ import faiss
 import torch
 import asyncio
 import numpy as np
-import subprocess
 import pyarrow as pa
 import pyarrow.parquet as pq
 from collections import deque
@@ -14,48 +13,19 @@ from torch import FloatStorage, IntStorage
 from torch import FloatTensor, IntTensor
 from torch.utils.data import TensorDataset, ConcatDataset, DataLoader
 from rich.progress import Progress
+from beir import util
+from beir.datasets.data_loader import GenericDataLoader
 from source import console
 from source.interface import Dataset, Embedding, PartitionName
 from source.dataset import workspace
-from source.utilities.dataset import download
 from source.embedding.bgeBase import BgeBaseEmbedding
 
 
-class MsMarcoDataset(Dataset):
-    """
-    Implementation of Dataset interface for MsMarco.
+class BeirDataset(Dataset):
 
-    MsMarco/
-    ├── doc
-    │   ├── partition-00000000.parquet
-    │   ├── partition-00000001.parquet
-    │   ├── partition-00000002.parquet
-    │   └── partition-00000003.parquet
-    ├── docEmb
-    │   └── BgeBase
-    │       ├── partition-00000000.bin
-    │       ├── partition-00000001.bin
-    │       ├── partition-00000002.bin
-    │       └── partition-00000003.bin
-    ├── mixEmb
-    │   └── BgeBase
-    │       ├── Train.bin
-    │       └── Validate.bin
-    ├── qry
-    │   ├── Train.parquet
-    │   └── Validate.parquet
-    ├── qryEmb
-    │   └── BgeBase
-    │       ├── Train.bin
-    │       └── Validate.bin
-    └── qryRel
-        ├── Train.tsv
-        └── Validate.tsv
-    """
+    name = "Beir"
 
-    name = "MsMarco"
-
-    def didIter(self, batchSize: int) -> Iterator[List[int]]:
+    def didIter(self, batchSize: int) -> Iterator[List[str]]:
         for i in range(DocIterInit.N):
             file = pq.ParquetFile(Path(DocIterInit.base, f"partition-{i:08d}.parquet"))
             for part in file.iter_batches(batchSize, columns=["id"]):
@@ -105,7 +75,7 @@ class MsMarcoDataset(Dataset):
         """
         embed = embedding()
         idx = 0
-        idxs = deque(sorted(idxs)) # type: ignore
+        idxs = deque(sorted(idxs))  # type: ignore
         done = False
         for p in range(4):
             path = Path(DocIterInit.base, f"partition-{p:08d}.parquet")
@@ -114,12 +84,12 @@ class MsMarcoDataset(Dataset):
             batches = file.iter_batches(1, columns=["text"])
             for i, part in enumerate(batches):
                 if idx == idxs[0]:
-                    idxs.popleft() # type: ignore
+                    idxs.popleft()  # type: ignore
                     txt = part.column("text").to_pylist()
                     """
                     @todo: add forward_prefix to the Embedding interface.
                     """
-                    vec, tokens, token_ids = embed.forward_prefix(txt) # type: ignore
+                    vec, tokens, token_ids = embed.forward_prefix(txt)  # type: ignore
                     yield vec, tokens, token_ids.detach().cpu().tolist()
                 idx += 1
                 if len(idxs) == 0:
@@ -135,7 +105,7 @@ class MsMarcoDataset(Dataset):
             docLen += file.metadata.num_rows
         return docLen
 
-    def qidIter(self, split: PartitionName, batchSize: int) -> Iterator[List[int]]:
+    def qidIter(self, split: PartitionName, batchSize: int) -> Iterator[List[str]]:
         path = Path(QryIterInit.base, f"{split}.parquet")
         for part in pq.ParquetFile(path).iter_batches(batchSize, columns=["id"]):
             yield part.column("id").to_pylist()
@@ -236,54 +206,45 @@ class MsMarcoDataset(Dataset):
 
 class DocIterInit:
     """
-    Initialize the document iterator for MsMarco.
+    Initialize the document iterator for Beir.
     """
 
     N = 4
-    base = Path(workspace, f"{MsMarcoDataset.name}/doc")
+    base = Path(workspace, f"{BeirDataset.name}/doc")
 
     def __init__(self) -> None:
-        console.log("Prepare DocIter for MsMarco")
+        console.log("Prepare DocIter for Beir")
         self.base.mkdir(mode=0o770, parents=True, exist_ok=True)
-        asyncio.run(self.dispatch())
+        self.dispatch()
 
-    async def dispatch(self) -> None:
-        await download(
-            "https://msmarco.z22.web.core.windows.net/msmarcoranking/collection.tar.gz",
-            Path(self.base, "collection.tar.gz"),
-        )
-        subprocess.run(
-            ["tar", "-xzvf", "collection.tar.gz"],
-            cwd=self.base,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=True,
-        )
-        Path(self.base, "collection.tar.gz").unlink()
-        Path(self.base, "collection.tsv").chmod(0o770)
-        ids: List[List[int]] = [[] for _ in range(self.N)]
-        texts: List[List[str]] = [[] for _ in range(self.N)]
-        with open(Path(self.base, "collection.tsv"), "r") as f:
-            for line in f:
-                parts = [p.strip() for p in line.split("\t")]
-                x0, x1 = int(parts[0]), parts[1]
-                ids[x0 % self.N].append(x0)
-                texts[x0 % self.N].append(x1)
+    def dispatch(self) -> None:
+        ids: List[str] = [[] for _ in range(self.N)]
+        texts: List[str] = [[] for _ in range(self.N)]
+        url = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{}.zip"  # fmt: off
+        for dataset in ["trec-covid", "nq", "dbpedia-entity"]:
+            folder = util.download_and_unzip(url.format(dataset), "data")
+            loader = GenericDataLoader(folder)
+            corpus, _, _ = loader.load(split="test")
+            for key, val in corpus.items():
+                assert isinstance(key, str)
+                assert isinstance(val, dict) and "text" in val
+                assert isinstance(val["text"], str)
+                ids[hash(key) % self.N].append(key)
+                texts[hash(key) % self.N].append(val["text"])
         for i in range(self.N):
             table = pa.Table.from_pydict({"id": ids[i], "text": texts[i]})
             pq.write_table(table, Path(self.base, f"partition-{i:08d}.parquet"))
-        Path(self.base, "collection.tsv").unlink()
 
 
 class DocEmbIterInit:
     """
-    Initialize the document embedding iterator for MsMarco.
+    Initialize the document embedding iterator for Beir.
     """
 
-    base = Path(workspace, f"{MsMarcoDataset.name}/docEmb")
+    base = Path(workspace, f"{BeirDataset.name}/docEmb")
 
     def __init__(self, embedding: Embedding, partition: int) -> None:
-        console.log("Prepare DocEmbIter for MsMarco, Partition", partition)
+        console.log("Prepare DocEmbIter for Beir, Partition", partition)
         self.base = Path(self.base, embedding.name)
         self.base.mkdir(mode=0o770, parents=True, exist_ok=True)
         self.embedding, self.partition = embedding, partition
@@ -309,70 +270,49 @@ class DocEmbIterInit:
 
 class QryIterInit:
     """
-    Initialize the query iterator for MsMarco.
+    Initialize the query iterator for Beir.
     """
 
-    base = Path(workspace, f"{MsMarcoDataset.name}/qry")
+    base = Path(workspace, f"{BeirDataset.name}/qry")
 
     def __init__(self) -> None:
-        console.log("Prepare QryIter for MsMarco")
+        console.log("Prepare QryIter for Beir")
         self.base.mkdir(mode=0o770, parents=True, exist_ok=True)
         asyncio.run(self.dispatch())
 
     async def dispatch(self) -> None:
-        await download(
-            "https://msmarco.z22.web.core.windows.net/msmarcoranking/queries.tar.gz",
-            Path(self.base, "queries.tar.gz"),
-        )
-        subprocess.run(
-            ["tar", "-xzvf", "queries.tar.gz"],
-            cwd=self.base,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=True,
-        )
-        Path(self.base, "queries.tar.gz").unlink()
-        Path(self.base, "queries.eval.tsv").unlink()
         ids: List[int] = []
         texts: List[str] = []
-        with open(Path(self.base, "queries.train.tsv"), "r") as f:
-            for line in f:
-                parts = [p.strip() for p in line.split("\t")]
-                x0, x1 = int(parts[0]), parts[1]
-                ids.append(x0)
-                texts.append(x1)
-        table = pa.Table.from_pydict({"id": ids, "text": texts})
-        pq.write_table(table, Path(self.base, "Train.parquet"))
-        ids.clear()
-        texts.clear()
-        with open(Path(self.base, "queries.dev.tsv"), "r") as f:
-            for line in f:
-                parts = [p.strip() for p in line.split("\t")]
-                x0, x1 = int(parts[0]), parts[1]
-                ids.append(x0)
-                texts.append(x1)
+        url = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{}.zip"  # fmt: off
+        for dataset in ["trec-covid", "nq", "dbpedia-entity"]:
+            folder = util.download_and_unzip(url.format(dataset), "data")
+            loader = GenericDataLoader(folder)
+            _, queries, _ = loader.load(split="test")
+            for key, val in queries.items():
+                assert isinstance(key, str)
+                assert isinstance(val, str)
+                ids.append(key)
+                texts.append(val)
         table = pa.Table.from_pydict({"id": ids, "text": texts})
         pq.write_table(table, Path(self.base, "Validate.parquet"))
-        Path(self.base, "queries.train.tsv").unlink()
-        Path(self.base, "queries.dev.tsv").unlink()
 
 
 class QryEmbIterInit:
     """
-    Initialize the query embedding iterator for MsMarco.
+    Initialize the query embedding iterator for Beir.
     """
 
-    base = Path(workspace, f"{MsMarcoDataset.name}/qryEmb")
+    base = Path(workspace, f"{BeirDataset.name}/qryEmb")
 
     def __init__(self, embedding: Embedding) -> None:
-        console.log("Prepare QryEmbIter for MsMarco")
+        console.log("Prepare QryEmbIter for Beir")
         self.base = Path(self.base, embedding.name)
         self.base.mkdir(mode=0o770, parents=True, exist_ok=True)
         self.embedding = embedding
         self.dispatch()
 
     def dispatch(self, batchSize: int = 1024) -> None:
-        for item in ["Train", "Validate"]:
+        for item in ["Validate"]:
             path = Path(QryIterInit.base, f"{item}.parquet")
             file = pq.ParquetFile(path)
             path = Path(self.base, f"{item}.bin")
@@ -392,36 +332,37 @@ class QryEmbIterInit:
 
 class QryRelInit:
     """
-    Initialize the query relevance for MsMarco.
+    Initialize the query relevance for Beir.
     """
 
-    base = Path(workspace, f"{MsMarcoDataset.name}/qryRel")
+    base = Path(workspace, f"{BeirDataset.name}/qryRel")
 
     def __init__(self) -> None:
-        console.log("Prepare QryRel for MsMarco")
+        console.log("Prepare QryRel for Beir")
         self.base.mkdir(mode=0o770, parents=True, exist_ok=True)
-        asyncio.run(self.dispatch())
+        self.dispatch()
 
-    async def dispatch(self):
-        # we should have dispatched all tasks at once, but due to progress bar
-        # constraints, only one at a time is possible. Otherwise, the progress
-        # bar would be globally defined, and may interfere with training logs.
-        await download(
-            "https://msmarco.z22.web.core.windows.net/msmarcoranking/qrels.dev.tsv",
-            Path(self.base, "Validate.tsv"),
-        )
-        await download(
-            "https://msmarco.z22.web.core.windows.net/msmarcoranking/qrels.train.tsv",
-            Path(self.base, "Train.tsv"),
-        ),
+    def dispatch(self) -> None:
+        url = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{}.zip"  # fmt: off
+        with Path(self.base, "Validate.tsv").open("w") as f:
+            for dataset in ["trec-covid", "nq", "dbpedia-entity"]:
+                folder = util.download_and_unzip(url.format(dataset), "data")
+                _, _, qrels = GenericDataLoader(folder).load(split="test")
+                for qid, val in qrels.items():
+                    assert isinstance(qid, str)
+                    for did, rel in val.items():
+                        assert isinstance(did, str)
+                        assert isinstance(rel, int)
+                        f.write(f"{qid}\t0\t{did}\t{rel}\n")
+                f.flush()
 
 
 class MixEmbIterInit:
     """
-    Initialize the mixed embedding iterator for MsMarco.
+    Initialize the mixed embedding iterator for Beir.
     """
 
-    base = Path(workspace, f"{MsMarcoDataset.name}/mixEmb")
+    base = Path(workspace, f"{BeirDataset.name}/mixEmb")
 
     def __init__(self, embedding: Type[Embedding]) -> None:
         self.base = Path(self.base, embedding.name)
@@ -441,7 +382,7 @@ class MixEmbIterInit:
         readSize: int = 8192,
         saveSize: int = 512,
     ) -> None:
-        dataset = MsMarcoDataset()
+        dataset = BeirDataset()
         docEmbs = np.empty((dataset.getDocLen(), embedding.size), dtype=np.float32)
         with Progress(console=console) as progress:
             T = progress.add_task("Indexing", total=dataset.getDocLen())
@@ -451,34 +392,32 @@ class MixEmbIterInit:
                 docEmbs[i * readSize : (i + 1) * readSize] = batch.numpy()
                 progress.advance(T, readSize)
             self.index.add(docEmbs)
-            items: List[PartitionName] = ["Train", "Validate"]
-            for item in items:
-                path = Path(self.base, f"{item}.bin")
-                N, K = dataset.getQryLen(item), 256
-                storage = IntStorage.from_file(str(path), True, N * K)
-                samples = IntTensor(storage).reshape(N, K)
-                T = progress.add_task("Querying", total=N)
-                for i, batch in enumerate(
-                    dataset.qryEmbIter(embedding, item, saveSize, 8, False)
-                ):
-                    _, I = self.index.search(batch.numpy(), 256)
-                    I = torch.from_numpy(I).to(torch.int32)
-                    samples[i * saveSize : (i + 1) * saveSize] = I
-                    progress.advance(T, saveSize)
+            path = Path(self.base, f"Validate.bin")
+            N, K = dataset.getQryLen("Validate"), 256
+            storage = IntStorage.from_file(str(path), True, N * K)
+            samples = IntTensor(storage).reshape(N, K)
+            T = progress.add_task("Querying", total=N)
+            for i, batch in enumerate(
+                dataset.qryEmbIter(embedding, "Validate", saveSize, 8, False)
+            ):
+                _, I = self.index.search(batch.numpy(), 256)
+                I = torch.from_numpy(I).to(torch.int32)
+                samples[i * saveSize : (i + 1) * saveSize] = I
+                progress.advance(T, saveSize)
 
 
 def main():
     """
     Initialize the MsMarco dataset.
     """
-    DocIterInit()
-    DocEmbIterInit(BgeBaseEmbedding(), partition=0)
-    DocEmbIterInit(BgeBaseEmbedding(), partition=1)
-    DocEmbIterInit(BgeBaseEmbedding(), partition=2)
-    DocEmbIterInit(BgeBaseEmbedding(), partition=3)
-    QryIterInit()
-    QryEmbIterInit(BgeBaseEmbedding())
-    MixEmbIterInit(BgeBaseEmbedding)
+    # DocIterInit()
+    # DocEmbIterInit(BgeBaseEmbedding(), partition=0)
+    # DocEmbIterInit(BgeBaseEmbedding(), partition=1)
+    # DocEmbIterInit(BgeBaseEmbedding(), partition=2)
+    # DocEmbIterInit(BgeBaseEmbedding(), partition=3)
+    # QryIterInit()
+    # QryEmbIterInit(BgeBaseEmbedding())
+    # MixEmbIterInit(BgeBaseEmbedding)
     QryRelInit()
 
 
