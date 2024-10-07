@@ -150,7 +150,6 @@ class BeirDataset(Dataset):
         return file.metadata.num_rows
 
     def getQryRel(self, split: PartitionName) -> Path:
-        raise NotImplementedError("Query relevance file not available.")
         return Path(QryRelInit.base, f"{split}.tsv")
 
     def mixEmbIter(

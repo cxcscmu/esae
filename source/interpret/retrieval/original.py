@@ -1,5 +1,10 @@
+"""
+@brief: Perform dense retrieval on the original embedding.
+@author: Hao Kang <haok@andrew.cmu.edu>
+@date: October 6, 2024
+"""
+
 import faiss
-import shutil
 import argparse
 import subprocess
 from typing import Type
@@ -7,18 +12,17 @@ from pathlib import Path
 from rich.progress import Progress
 from source import console
 from source.interpret.retrieval import workspace
-from source.dataset import MsMarcoDataset
+from source.dataset import MsMarcoDataset, BeirDataset
 from source.embedding import BgeBaseEmbedding
 from source.interface import Dataset, Embedding
 
 
-def main(dataset: Dataset, embedding: Type[Embedding]):
-
+def main(embedding: Type[Embedding], dataset: Dataset) -> None:
     # define where to save results
     saveBase = Path(workspace, "original")
     saveBase.mkdir(mode=0o770, parents=True, exist_ok=True)
-    qresFile = Path(saveBase, f"{dataset.name}{embedding.name}.qres")
-    evalFile = Path(saveBase, f"{dataset.name}{embedding.name}.eval")
+    qresFile = Path(saveBase, f"{embedding.name}{dataset.name}.qres")
+    evalFile = Path(saveBase, f"{embedding.name}{dataset.name}.eval")
 
     # build index with faiss across GPUs
     cpuIndex = faiss.IndexFlatIP(embedding.size)
@@ -31,7 +35,7 @@ def main(dataset: Dataset, embedding: Type[Embedding]):
         p.remove_task(t)
     gpuIndex = faiss.index_cpu_to_all_gpus(cpuIndex)
 
-    # perform retrieval for validation set
+    # perform retrieval on the validation set
     dids = [d for batch in dataset.didIter(4096) for d in batch]
     with Progress(console=console) as p:
         t = p.add_task("Retrieving...", total=dataset.getQryLen("Validate"))
@@ -47,7 +51,7 @@ def main(dataset: Dataset, embedding: Type[Embedding]):
                 p.update(t, advance=qrys.size(0))
         p.remove_task(t)
 
-    # evaluate results with trec_eval
+    # evaluate the retrieval results
     args = []
     args.append("trec_eval")
     args.extend(["-m", "all_trec"])
@@ -56,20 +60,21 @@ def main(dataset: Dataset, embedding: Type[Embedding]):
     with console.status("Evaluating..."):
         with evalFile.open("w") as f:
             subprocess.run(args, stdout=f)
-    shutil.copy(evalFile, "last.log")
 
 
 if __name__ == "__main__":
     # specify command line arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("dataset", type=str, choices=["MsMarco"])
     parser.add_argument("embedding", type=str, choices=["BgeBase"])
+    parser.add_argument("dataset", type=str, choices=["MsMarco", "Beir"])
     args = parser.parse_args()
 
     # parse arguments into concrete instances
     match args.dataset:
         case "MsMarco":
             dataset = MsMarcoDataset()
+        case "Beir":
+            dataset = BeirDataset()
         case _:
             raise NotImplementedError()
     match args.embedding:
@@ -79,4 +84,4 @@ if __name__ == "__main__":
             raise NotImplementedError()
 
     # run the workflow
-    main(dataset, embedding)
+    main(embedding, dataset)
