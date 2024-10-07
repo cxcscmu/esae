@@ -38,6 +38,7 @@ class MiniPcmEmbedding(Embedding):
         kwargs["truncation"] = True
         kwargs["return_tensors"] = "pt"
         kwargs["return_attention_mask"] = True
+        kwargs["max_length"] = 512
         encoded = self.tokenizer(passages, **kwargs)
         encoded = encoded.to(self.devices[0])
         outputs = self.model.forward(**encoded)
