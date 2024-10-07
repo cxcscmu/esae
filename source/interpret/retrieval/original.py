@@ -1,9 +1,3 @@
-"""
-@brief: Perform dense retrieval on the original embedding.
-@author: Hao Kang <haok@andrew.cmu.edu>
-@date: October 6, 2024
-"""
-
 import faiss
 import argparse
 import subprocess

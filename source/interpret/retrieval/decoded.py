@@ -10,17 +10,16 @@ from source import console
 from source.interpret.retrieval import workspace
 from source.model import workspace as modelWorkspace
 from source.utilities.model import saveComputed
-from source.dataset import MsMarcoDataset
+from source.dataset import MsMarcoDataset, BeirDataset
 from source.embedding import BgeBaseEmbedding
 from source.interface import Dataset, Embedding
 
 
-def main(dataset: Dataset, embedding: Type[Embedding], version: str):
-
+def main(embedding: Type[Embedding], dataset: Dataset, version: str):
     # define where to read computed features
-    readBase = Path(modelWorkspace, version, "computed")
+    readBase = Path(modelWorkspace, version, "computed", dataset.name)
     if not readBase.exists():
-        saveComputed(dataset, embedding, version)
+        saveComputed(embedding, dataset, version)
     docDecode = np.memmap(
         Path(readBase, "docDecode.bin"),
         dtype=np.float32,
@@ -33,7 +32,7 @@ def main(dataset: Dataset, embedding: Type[Embedding], version: str):
     )
 
     # define where to save results
-    saveBase = Path(workspace, "decoded")
+    saveBase = Path(workspace, "decoded", dataset.name)
     saveBase.mkdir(mode=0o770, parents=True, exist_ok=True)
     qresFile = Path(saveBase, f"{version}.qres")
     evalFile = Path(saveBase, f"{version}.eval")
@@ -74,15 +73,17 @@ def main(dataset: Dataset, embedding: Type[Embedding], version: str):
 if __name__ == "__main__":
     # specify command line arguments
     parser = argparse.ArgumentParser()
+    parser.add_argument("embedding", type=str, choices=["BgeBase"])
+    parser.add_argument("dataset", type=str, choices=["MsMarco", "Beir"])
     parser.add_argument("version", type=str)
-    parser.add_argument("--dataset", type=str, default="MsMarco", choices=["MsMarco"])
-    parser.add_argument("--embedding", type=str, default="BgeBase", choices=["BgeBase"])
     args = parser.parse_args()
 
     # parse arguments into concrete instances
     match args.dataset:
         case "MsMarco":
             dataset = MsMarcoDataset()
+        case "Beir":
+            dataset = BeirDataset()
         case _:
             raise NotImplementedError()
     match args.embedding:
@@ -92,4 +93,4 @@ if __name__ == "__main__":
             raise NotImplementedError()
 
     # run the workflow
-    main(dataset, embedding, args.version)
+    main(embedding, dataset, args.version)

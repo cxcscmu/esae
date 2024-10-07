@@ -1,9 +1,3 @@
-"""
-@brief: Implementation for BEIR dataset.
-@author: Hao Kang <haok@andrew.cmu.edu>
-@date: October 06, 2024
-"""
-
 import faiss
 import torch
 import asyncio

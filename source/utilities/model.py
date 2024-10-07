@@ -11,11 +11,10 @@ from source.interface import Embedding, Dataset, SAE
 
 
 @torch.inference_mode()
-def saveComputed(dataset: Dataset, embedding: Type[Embedding], version: str):
-
+def saveComputed(embedding: Type[Embedding], dataset: Dataset, version: str):
     # define where to read weights and save results
     readBase = Path(workspace, version, "snapshot")
-    saveBase = Path(workspace, version, "computed")
+    saveBase = Path(workspace, version, "computed", dataset.name)
     saveBase.mkdir(mode=0o770, parents=True, exist_ok=True)
 
     # load model into memory
