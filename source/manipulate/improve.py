@@ -94,6 +94,10 @@ def newRecon(
     docIndex = torch.from_numpy(docIndex).to(torch.int64).cuda()
     docValue = torch.from_numpy(docValue).to(torch.float32).cuda()
     docLatent.scatter_(0, docIndex, docValue)
+
+    mask = qryValue != 0
+    qryIndex = qryIndex[mask]
+    qryValue = qryValue[mask]
     docLatent[qryIndex[:limit]] += delta
 
     with torch.no_grad():
@@ -180,11 +184,13 @@ with qrelPath.open("r") as qrelFile:
 
 
 with Progress(console=console) as p:
-    m = 1e3  # take a subset
+    m = 1000  # take a subset
     t = p.add_task("Improving...", total=m)
 
     with qresPath.open("w") as qresFile:
         for qof, rel in qrelDict.items():
+            if (m := m - 1) < 0:
+                break
             original = docDecode[rel].copy()
             for dof in rel:
                 docIndex, docValue = docLatentIndex[dof], docLatentValue[dof]
