@@ -1,13 +1,16 @@
 import faiss
 import argparse
 import subprocess
+import torch.cuda as cuda
 from typing import Type
 from pathlib import Path
 from rich.progress import Progress
 from source import console
 from source.interpret.retrieval import workspace
-from source.dataset import MsMarcoDataset, BeirDataset
-from source.embedding import BgeBaseEmbedding
+from source.dataset.msMarco import MsMarcoDataset
+# from source.dataset.beir import BeirDataset
+from source.embedding.bgeBase import BgeBaseEmbedding
+from source.embedding.miniPcm import MiniPcmEmbedding
 from source.interface import Dataset, Embedding
 
 
@@ -27,7 +30,12 @@ def main(embedding: Type[Embedding], dataset: Dataset) -> None:
             cpuIndex.add(docEmb.numpy())
             p.update(t, advance=docEmb.size(0))
         p.remove_task(t)
-    gpuIndex = faiss.index_cpu_to_all_gpus(cpuIndex)
+    devices = [i for i in range(cuda.device_count())]
+    resources = [faiss.StandardGpuResources() for _ in range(len(devices))]
+    clonerOptions = faiss.GpuMultipleClonerOptions()
+    clonerOptions.shard = True
+    args = (resources, cpuIndex, clonerOptions, devices)
+    gpuIndex = faiss.index_cpu_to_gpu_multiple_py(*args)
 
     # perform retrieval on the validation set
     dids = [d for batch in dataset.didIter(4096) for d in batch]
@@ -59,7 +67,7 @@ def main(embedding: Type[Embedding], dataset: Dataset) -> None:
 if __name__ == "__main__":
     # specify command line arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("embedding", type=str, choices=["BgeBase"])
+    parser.add_argument("embedding", type=str, choices=["BgeBase", "MiniCpm"])
     parser.add_argument("dataset", type=str, choices=["MsMarco", "Beir"])
     args = parser.parse_args()
 
@@ -74,6 +82,8 @@ if __name__ == "__main__":
     match args.embedding:
         case "BgeBase":
             embedding = BgeBaseEmbedding
+        case "MiniCpm":
+            embedding = MiniPcmEmbedding
         case _:
             raise NotImplementedError()
 

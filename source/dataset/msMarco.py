@@ -290,7 +290,7 @@ class DocEmbIterInit:
         self.embedding, self.partition = embedding, partition
         self.dispatch()
 
-    def dispatch(self, batchSize: int = 192) -> None:
+    def dispatch(self, batchSize: int = 128) -> None:
         path = Path(DocIterInit.base, f"partition-{self.partition:08d}.parquet")
         file = pq.ParquetFile(path)
         path = Path(self.base, f"partition-{self.partition:08d}.bin")
@@ -305,6 +305,7 @@ class DocEmbIterInit:
                 vec = self.embedding.forward(txt)
                 samples[i * batchSize : (i + 1) * batchSize] = vec
                 progress.advance(T, batchSize)
+                torch.cuda.empty_cache()
             progress.remove_task(T)
 
 
@@ -372,7 +373,7 @@ class QryEmbIterInit:
         self.embedding = embedding
         self.dispatch()
 
-    def dispatch(self, batchSize: int = 1024) -> None:
+    def dispatch(self, batchSize: int = 256) -> None:
         for item in ["Train", "Validate"]:
             path = Path(QryIterInit.base, f"{item}.parquet")
             file = pq.ParquetFile(path)
@@ -388,6 +389,7 @@ class QryEmbIterInit:
                     vec = self.embedding.forward(txt)
                     samples[i * batchSize : (i + 1) * batchSize] = vec
                     progress.advance(T, batchSize)
+                    torch.cuda.empty_cache()
                 progress.remove_task(T)
 
 
@@ -472,19 +474,21 @@ def main():
     """
     Initialize the MsMarco dataset.
     """
-    # DocIterInit()
-    # DocEmbIterInit(BgeBaseEmbedding(), partition=0)
-    # DocEmbIterInit(BgeBaseEmbedding(), partition=1)
-    # DocEmbIterInit(BgeBaseEmbedding(), partition=2)
-    # DocEmbIterInit(BgeBaseEmbedding(), partition=3)
+    DocIterInit()
+    DocEmbIterInit(BgeBaseEmbedding(), partition=0)
+    DocEmbIterInit(BgeBaseEmbedding(), partition=1)
+    DocEmbIterInit(BgeBaseEmbedding(), partition=2)
+    DocEmbIterInit(BgeBaseEmbedding(), partition=3)
     DocEmbIterInit(MiniPcmEmbedding(), partition=0)
-    # DocEmbIterInit(MiniPcmEmbedding(), partition=1)
-    # DocEmbIterInit(MiniPcmEmbedding(), partition=2)
-    # DocEmbIterInit(MiniPcmEmbedding(), partition=3)
-    # QryIterInit()
-    # QryEmbIterInit(BgeBaseEmbedding())
-    # MixEmbIterInit(BgeBaseEmbedding)
-    # QryRelInit()
+    DocEmbIterInit(MiniPcmEmbedding(), partition=1)
+    DocEmbIterInit(MiniPcmEmbedding(), partition=2)
+    DocEmbIterInit(MiniPcmEmbedding(), partition=3)
+    QryIterInit()
+    QryEmbIterInit(BgeBaseEmbedding())
+    QryEmbIterInit(MiniPcmEmbedding())
+    MixEmbIterInit(BgeBaseEmbedding)
+    MixEmbIterInit(MiniPcmEmbedding)
+    QryRelInit()
 
 
 if __name__ == "__main__":

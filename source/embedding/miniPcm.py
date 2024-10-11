@@ -22,7 +22,6 @@ class MiniPcmEmbedding(Embedding):
         self.pad_idx = self.tokenizer.pad_token_id
         kwargs = dict()
         kwargs["trust_remote_code"] = True
-        kwargs["attn_implementation"] = "flash_attention_2"
         kwargs["torch_dtype"] = torch.float16
         model = AutoModel.from_pretrained("openbmb/MiniCPM-Embedding", **kwargs)
         model = model.eval().to(devices[0])
@@ -45,7 +44,7 @@ class MiniPcmEmbedding(Embedding):
         masking = encoded["attention_mask"]
         s = torch.sum(outputs.last_hidden_state * masking.unsqueeze(-1).float(), dim=1)
         d = masking.sum(dim=1, keepdim=True).float()
-        return F.normalize(s / d, p=2, dim=1)
+        return F.normalize(s / d, p=2, dim=1).float()
 
     # @torch.inference_mode()
     # def forward_prefix(self, passages: List[str]) -> Tuple[Tensor, Any, Any]:
