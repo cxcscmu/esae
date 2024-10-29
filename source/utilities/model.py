@@ -96,3 +96,9 @@ def saveComputed(embedding: Type[Embedding], dataset: Dataset, version: str):
             qryDecode[i * 8192 : (i + 1) * 8192] = decode.cpu().numpy()
             p.advance(t, batch.size(0))
         p.remove_task(t)
+
+
+from source.embedding.bgeBase import BgeBaseEmbedding
+from source.dataset.msMarco import MsMarcoDataset
+
+saveComputed(BgeBaseEmbedding, MsMarcoDataset(), "kld_x256_k128")

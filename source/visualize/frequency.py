@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from rich.progress import Progress
 from pathlib import Path
 from collections import Counter
-from source.dataset import MsMarcoDataset
+from source.dataset.msMarco import MsMarcoDataset
 
 
 def calc():
@@ -41,23 +41,76 @@ def calc():
     np.save("saved2.npy", counter)
 
 
-def plot():
-    # Set a modern aesthetic style using seaborn
+# def plot(sample_size=5000):
+#     # Choose the plot style
+#     sns.set_theme(style="whitegrid")
+#     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+#     legendSize, titleSize, labelSize, tickSize = 18, 24, 21, 18
+#     plt.rcParams.update({"font.size": 18})
+
+#     # Load the saved counter for bag-of-words
+#     with open("saved1.bin", "rb") as f:
+#         counter = pickle.load(f)
+#         counter = Counter(counter.values())
+#     x1, y1 = list(counter.keys()), list(counter.values())
+
+#     # Sample a subset of the data
+#     indices1 = np.random.choice(len(x1), size=min(sample_size, len(x1)), replace=False)
+#     x1_sample, y1_sample = np.array(x1)[indices1], np.array(y1)[indices1]
+
+#     # Load the saved counter for latent features
+#     counter = np.load("saved2.npy")
+#     counter = Counter(counter)
+#     x2, y2 = list(counter.keys()), list(counter.values())
+
+#     # Sample a subset of the latent features data
+#     indices2 = np.random.choice(len(x2), size=min(sample_size, len(x2)), replace=False)
+#     x2_sample, y2_sample = np.array(x2)[indices2], np.array(y2)[indices2]
+
+#     # Scatter plot for bag-of-words on the first row
+#     ax1.set_xscale("log")
+#     ax1.set_yscale("log")
+#     ax1.scatter(x1_sample, y1_sample, s=10, color="blue", alpha=0.6, marker="o")
+#     ax1.set_xlabel("Frequency", fontsize=labelSize)
+#     ax1.set_ylabel("Occurrence", fontsize=labelSize)
+#     ax1.tick_params(axis="both", which="major", labelsize=tickSize)
+#     ax1.set_title(
+#         "Unigram Bag-of-Words",
+#         fontsize=titleSize,
+#         weight="bold",
+#     )
+#     ax1.grid(True, which="both", ls="--", lw=0.7)
+
+#     # Scatter plot for latent features on the second row
+#     ax2.set_xscale("log")
+#     ax2.set_yscale("log")
+#     ax2.scatter(x2_sample, y2_sample, s=10, color="green", alpha=0.6, marker="x")
+#     ax2.set_xlabel("Frequency", fontsize=labelSize)
+#     ax2.set_ylabel("Occurrence", fontsize=labelSize)
+#     ax2.tick_params(axis="both", which="major", labelsize=tickSize)
+#     ax2.set_title(
+#         "Sparse Latent Features",
+#         fontsize=titleSize,
+#         weight="bold",
+#     )
+#     ax2.grid(True, which="both", ls="--", lw=0.7)
+
+#     # Set the same y-limits for both plots
+#     y_min = min(min(y1_sample), min(y2_sample))
+#     y_max = max(max(y1_sample), max(y2_sample))
+#     ax1.set_ylim([y_min, y_max])
+#     ax2.set_ylim([y_min, y_max])
+
+#     # Save the plot
+#     plt.tight_layout()
+#     plt.savefig("frequency.pdf", bbox_inches="tight", pad_inches=0)
+
+
+def plot(sample_size=5000):
+    # Choose the plot style
     sns.set_theme(style="whitegrid")
-
-    # Create figure and axes with larger size
-    fig, ax = plt.subplots(figsize=(10, 6))
-
-    # Log scale settings
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-
-    # Axis labels with increased font size
-    ax.set_xlabel("Frequency", fontsize=14)
-    ax.set_ylabel("Occurrence", fontsize=14)
-
-    # Title with larger font size
-    ax.set_title("Frequency Distribution", fontsize=16, weight="bold")
+    legendSize, titleSize, labelSize, tickSize = 18, 24, 21, 18
+    plt.rcParams.update({"font.size": 18})
 
     # Load the saved counter for bag-of-words
     with open("saved1.bin", "rb") as f:
@@ -65,29 +118,48 @@ def plot():
         counter = Counter(counter.values())
     x1, y1 = list(counter.keys()), list(counter.values())
 
-    # Scatter plot for bag-of-words
-    ax.scatter(
-        x1, y1, s=10, color="blue", alpha=0.6, label="Unigram Bag-of-Words", marker="o"
-    )
+    # Sample a subset of the data
+    indices1 = np.random.choice(len(x1), size=min(sample_size, len(x1)), replace=False)
+    x1_sample, y1_sample = np.array(x1)[indices1], np.array(y1)[indices1]
 
     # Load the saved counter for latent features
     counter = np.load("saved2.npy")
     counter = Counter(counter)
     x2, y2 = list(counter.keys()), list(counter.values())
 
-    # Scatter plot for latent features
-    ax.scatter(
-        x2, y2, s=10, color="green", alpha=0.6, label="Latent Features", marker="x"
-    )
+    # Sample a subset of the latent features data
+    indices2 = np.random.choice(len(x2), size=min(sample_size, len(x2)), replace=False)
+    x2_sample, y2_sample = np.array(x2)[indices2], np.array(y2)[indices2]
 
-    # Adding gridlines for better readability
-    ax.grid(True, which="both", ls="--", lw=0.5)
+    # Plot for bag-of-words
+    fig1, ax1 = plt.subplots(figsize=(8, 6))
+    ax1.set_xscale("log")
+    ax1.set_yscale("log")
+    ax1.scatter(x1_sample, y1_sample, s=10, color="blue", alpha=0.6, marker="o")
+    ax1.set_xlabel("Frequency", fontsize=labelSize)
+    ax1.set_ylabel("Occurrence", fontsize=labelSize)
+    ax1.tick_params(axis="both", which="major", labelsize=tickSize)
+    # ax1.set_title("Unigram Bag-of-Words", fontsize=titleSize, weight="bold")
+    ax1.grid(True, which="both", ls="--", lw=0.7)
+    plt.tight_layout()
+    fig1.savefig("unigram_bag_of_words.pdf", bbox_inches="tight", pad_inches=0)
 
-    # Adding a legend with a better position and larger font size
-    ax.legend(loc="upper right", fontsize=12, frameon=True)
+    # Plot for latent features
+    fig2, ax2 = plt.subplots(figsize=(8, 6))
+    ax2.set_xscale("log")
+    ax2.set_yscale("log")
+    ax2.scatter(x2_sample, y2_sample, s=10, color="green", alpha=0.6, marker="x")
+    ax2.set_xlabel("Frequency", fontsize=labelSize)
+    ax2.set_ylabel("Occurrence", fontsize=labelSize)
+    ax2.tick_params(axis="both", which="major", labelsize=tickSize)
+    # ax2.set_title("Sparse Latent Features", fontsize=titleSize, weight="bold")
+    ax2.grid(True, which="both", ls="--", lw=0.7)
+    plt.tight_layout()
+    fig2.savefig("sparse_latent_features.pdf", bbox_inches="tight", pad_inches=0)
 
-    # Save the figure with padding and tight layout
-    plt.savefig("frequency.pdf", bbox_inches="tight", pad_inches=0.1)
+    # Close figures to free memory
+    plt.close(fig1)
+    plt.close(fig2)
 
 
 if __name__ == "__main__":

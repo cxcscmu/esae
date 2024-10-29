@@ -52,13 +52,9 @@ model.load_state_dict(state["model"])
 model.eval().cuda()
 
 parser = argparse.ArgumentParser()
-parser.add_argument("mode", type=str, choices=["doc", "qry"])
 parser.add_argument("limit", type=int)
 parser.add_argument("delta", type=float)
 args = parser.parse_args()
-assert isinstance(args.mode, str)
-assert args.mode in ["doc", "qry"]
-mode: str = args.mode
 assert isinstance(args.limit, int)
 assert 0 <= args.limit <= activate
 limit: int = args.limit
@@ -79,38 +75,7 @@ def newIndex(vectors: NDArray[np.float32]) -> faiss.GpuIndexFlatIP:
     return gpuIndex
 
 
-def newDocRecon(
-    docIndex: NDArray[np.int32],
-    docValue: NDArray[np.float32],
-    qryIndex: NDArray[np.int32],
-    qryValue: NDArray[np.float32],
-) -> NDArray[np.float32]:
-    """
-    Manipulate the reconstructed document embedding by improving the relevant
-    latent dimensions using the query features.
-    """
-    assert docIndex.ndim == 1
-    assert docValue.ndim == 1
-    assert qryIndex.ndim == 1
-    assert qryValue.ndim == 1
-
-    docLatent = torch.zeros(features * expanded, dtype=torch.float32).cuda()
-    docIndex = torch.from_numpy(docIndex).to(torch.int64).cuda()
-    docValue = torch.from_numpy(docValue).to(torch.float32).cuda()
-    docLatent.scatter_(0, docIndex, docValue)
-
-    mask = qryValue != 0
-    qryIndex = qryIndex[mask]
-    qryValue = qryValue[mask]
-    docLatent[qryIndex[:limit]] += delta
-
-    with torch.no_grad():
-        docRecon = model.forwardDecoder(docLatent.unsqueeze(0))
-        docRecon = docRecon.squeeze(0).cpu().numpy()
-    return docRecon
-
-
-def newQryRecon(
+def newRecon(
     qryIndex: NDArray[np.int32],
     qryValue: NDArray[np.float32],
     docIndexBulk: List[NDArray[np.int32]],
@@ -134,7 +99,6 @@ def newQryRecon(
     for docIndex, docValue in zip(docIndexBulk, docValueBulk):
         mask = docValue != 0
         docIndex = docIndex[mask]
-        docValue = docValue[mask]
         qryLatent[docIndex[:limit]] += delta
 
     with torch.no_grad():
@@ -217,9 +181,9 @@ with qrelPath.open("r") as qrelFile:
         qof, dof = qidLookup[int(qid)], didLookup[int(did)]
         qrelDict.setdefault(qof, []).append(dof)
 
-docIndex = newIndex(docDecode)
-qresPath = Path(basePath, f"{mode}_{limit:03d}_{delta:.3f}.qres")
-evalPath = Path(basePath, f"{mode}_{limit:03d}_{delta:.3f}.eval")
+gpuIndex = newIndex(docDecode)
+qresPath = Path(basePath, f"qry_{limit:03d}_{delta:.3f}.qres")
+evalPath = Path(basePath, f"qry_{limit:03d}_{delta:.3f}.eval")
 
 with Progress(console=console) as p:
     m = 1000  # take a subset
@@ -228,26 +192,14 @@ with Progress(console=console) as p:
     with qresPath.open("w") as qresFile:
         for qof, rel in qrelDict.items():
             if (m := m - 1) < 0:
-                break
-            if mode == "doc":
-                for dof in rel:
-                    docIndex, docValue = docLatentIndex[dof], docLatentValue[dof]
-                    qryIndex, qryValue = qryLatentIndex[qof], qryLatentValue[qof]
-                    newDecode = newDocRecon(docIndex, docValue, qryIndex, qryValue)
-                    docIndex.replace(dof, newDecode)
-                qids = np.array([qidTable[qof]], dtype=np.int32)
-                qrys = qryDecode[qof].reshape(1, features).astype(np.float32)
-                retrieve(docIndex, qids, qrys, didTable, qresFile)
-                for dof in rel:
-                    docIndex.replace(dof, docDecode[dof])
-            elif mode == "qry":
-                qryIndex, qryValue = qryLatentIndex[qof], qryLatentValue[qof]
-                docIndexBulk, docValueBulk = [], []
-                for dof in rel:
-                    docIndexBulk.append(docLatentIndex[dof])
-                    docValueBulk.append(docLatentValue[dof])
-                newDecode = newQryRecon(qryIndex, qryValue, docIndexBulk, docValueBulk)
-                qids = np.array([qidTable[qof]], dtype=np.int32)
-                qrys = newDecode.reshape(1, features).astype(np.float32)
-                retrieve(docIndex, qids, qrys, didTable, qresFile)
+                break            
+            qryIndex, qryValue = qryLatentIndex[qof], qryLatentValue[qof]
+            docIndexBulk, docValueBulk = [], []
+            for dof in rel:
+                docIndexBulk.append(docLatentIndex[dof])
+                docValueBulk.append(docLatentValue[dof])
+            qryRecon = newRecon(qryIndex, qryValue, docIndexBulk, docValueBulk)
+            qids = np.array([qidTable[qof]], dtype=np.int32)
+            qrys = qryRecon.reshape(1, features).astype(np.float32)
+            retrieve(gpuIndex, qids, qrys, didTable, qresFile)
             p.update(t, advance=1)

@@ -6,29 +6,28 @@ channels:
   - conda-forge
 
 dependencies:
-  - python=3.12.0
-  - pip=24.2
+  - python=3.12
+  - pip
   - pytorch=2.4.0
   - pytorch-cuda=12.4
-  - numpy=1.26.4
-  - rich=13.7.1
-  - pyarrow=16.1.0
-  - mypy=1.10.0
-  - aiofiles=22.1.0
-  - aiohttp=3.9.5
-  - transformers=4.44.2
-  - pytest=7.4.4
-  - pytest-asyncio=0.20.3
-  - types-aiofiles=24.1.0.20240626
-  - attrs=23.1.0
+  - numpy
+  - rich
+  - pyarrow
+  - mypy
+  - aiofiles
+  - aiohttp
+  - transformers
+  - pytest
+  - pytest-asyncio
+  - types-aiofiles
+  - attrs
   - wandb
   - faiss-gpu=1.8.0
-  - blobfile=3.0.0
+  - blobfile
   - elasticsearch=8.15.1
   - pillow
   - seaborn
   - sentencepiece
   - pip:
       - treevizer
-      - beir
       - flash-attn

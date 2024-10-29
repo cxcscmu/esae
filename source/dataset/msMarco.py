@@ -386,6 +386,7 @@ class QryEmbIterInit:
                 batches = file.iter_batches(batchSize, columns=["text"])
                 for i, part in enumerate(batches):
                     txt = part.column("text").to_pylist()
+                    txt = [f"Query: {t}" for t in txt]
                     vec = self.embedding.forward(txt)
                     samples[i * batchSize : (i + 1) * batchSize] = vec
                     progress.advance(T, batchSize)
@@ -474,21 +475,21 @@ def main():
     """
     Initialize the MsMarco dataset.
     """
-    DocIterInit()
-    DocEmbIterInit(BgeBaseEmbedding(), partition=0)
-    DocEmbIterInit(BgeBaseEmbedding(), partition=1)
-    DocEmbIterInit(BgeBaseEmbedding(), partition=2)
-    DocEmbIterInit(BgeBaseEmbedding(), partition=3)
-    DocEmbIterInit(MiniPcmEmbedding(), partition=0)
-    DocEmbIterInit(MiniPcmEmbedding(), partition=1)
-    DocEmbIterInit(MiniPcmEmbedding(), partition=2)
-    DocEmbIterInit(MiniPcmEmbedding(), partition=3)
-    QryIterInit()
-    QryEmbIterInit(BgeBaseEmbedding())
+    # DocIterInit()
+    # DocEmbIterInit(BgeBaseEmbedding(), partition=0)
+    # DocEmbIterInit(BgeBaseEmbedding(), partition=1)
+    # DocEmbIterInit(BgeBaseEmbedding(), partition=2)
+    # DocEmbIterInit(BgeBaseEmbedding(), partition=3)
+    # DocEmbIterInit(MiniPcmEmbedding(), partition=0)
+    # DocEmbIterInit(MiniPcmEmbedding(), partition=1)
+    # DocEmbIterInit(MiniPcmEmbedding(), partition=2)
+    # DocEmbIterInit(MiniPcmEmbedding(), partition=3)
+    # QryIterInit()
+    # QryEmbIterInit(BgeBaseEmbedding())
     QryEmbIterInit(MiniPcmEmbedding())
-    MixEmbIterInit(BgeBaseEmbedding)
-    MixEmbIterInit(MiniPcmEmbedding)
-    QryRelInit()
+    # MixEmbIterInit(BgeBaseEmbedding)
+    # MixEmbIterInit(MiniPcmEmbedding)
+    # QryRelInit()
 
 
 if __name__ == "__main__":
